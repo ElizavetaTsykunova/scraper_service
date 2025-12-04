@@ -39,8 +39,5 @@ class Settings(BaseSettings):
     yandex_request_timeout_sec: int = 15000
     yandex_max_concurrency: int = 3
 
-    class Config:
-        env_file = ".env"
-
 
 settings = Settings()

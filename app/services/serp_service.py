@@ -86,7 +86,8 @@ class SerpService:
                     pages.append(serp_page)
                     pages_scanned += 1
                 except ScraperError as e:
-                    local_error = e.error_code.value  # type: ignore[attr-defined]
+                    code = getattr(e, "error_code", None)
+                    local_error = getattr(code, "value", code)
                     partial = True
                     break
 
@@ -141,7 +142,8 @@ class SerpService:
                     pages.append(serp_page)
                     pages_scanned += 1
                 except ScraperError as e:
-                    local_error = e.error_code.value  # type: ignore[attr-defined]
+                    code = getattr(e, "error_code", None)
+                    local_error = getattr(code, "value", code)
                     partial = True
                     break
 

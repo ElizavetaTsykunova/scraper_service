@@ -4,7 +4,7 @@ import httpx
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 from app.config import settings
-from app.errors import ScraperError, ScraperErrorCode
+from app.errors import ScraperError
 
 
 class BrightDataClient:
@@ -52,12 +52,12 @@ class BrightDataClient:
             # маппим на error_code="timeout"
             raise ScraperError(
                 "Bright Data Browser API timeout",
-                ScraperErrorCode.timeout,
+                "timeout",
             ) from e
         except Exception as e:
             # любая другая ошибка сети / браузера → source_unavailable
             raise ScraperError(
                 "Bright Data Browser API error",
-                ScraperErrorCode.source_unavailable,
+                "source_unavailable",
             ) from e
 

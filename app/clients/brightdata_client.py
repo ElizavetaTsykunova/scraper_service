@@ -1,92 +1,63 @@
-from typing import Any, Dict
+from typing import Any
+
 import httpx
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 
 from app.config import settings
-from app.errors import (
-    BrightDataSourceUnavailable,
-    BrightDataTimeoutError,
-    BrightDataInternalError,
-)
+from app.errors import ScraperError, ScraperErrorCode
 
 
 class BrightDataClient:
+    """
+    Клиент для Browser API Bright Data.
+
+    Сейчас у него одна ключевая функция:
+    - fetch_page_html(url): вернуть HTML произвольной страницы (Google, сайт и т.д.)
+    """
+
     def __init__(self, http_client: httpx.AsyncClient):
-        self._client = http_client
-        self._serp_endpoint = settings.brightdata_serp_endpoint_url
-        self._site_endpoint = settings.brightdata_site_endpoint_url
-        self._api_key = settings.brightdata_api_key
-        self._timeout = settings.brightdata_timeout_sec
-
-    async def fetch_google_serp(
-        self,
-        query: str,
-        page: int,
-        locale: str,
-        geo: str,
-        results_per_page: int,
-    ) -> Dict[str, Any]:
-        # TODO: подстроить под конкретный формат Bright Data SERP API
-        payload = {
-            "query": query,
-            "page": page,
-            "locale": locale,
-            "geo": geo,
-            "results_per_page": results_per_page,
-        }
-        try:
-            resp = await self._client.post(
-                self._serp_endpoint,
-                json=payload,
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                timeout=self._timeout,
-            )
-        except httpx.TimeoutException as e:
-            raise BrightDataTimeoutError from e
-        except httpx.HTTPError as e:
-            raise BrightDataSourceUnavailable from e
-
-        if 500 <= resp.status_code < 600:
-            raise BrightDataSourceUnavailable(f"Bright Data 5xx: {resp.status_code}")
-        if resp.status_code >= 400:
-            raise BrightDataInternalError(f"Bright Data 4xx: {resp.text}")
-
-        try:
-            data = resp.json()
-        except ValueError as e:
-            raise BrightDataInternalError("Invalid JSON from Bright Data") from e
-
-        return data
+        # http_client оставляем на будущее (если понадобятся HTTP-эндпоинты Bright Data)
+        self.http_client = http_client
 
     async def fetch_page_html(self, url: str) -> str:
-        # TODO: подстроить под конкретный формат Crawl / Browser API
-        payload = {
-            "url": url,
-            "render_js": True,
-        }
-        try:
-            resp = await self._client.post(
-                self._site_endpoint,
-                json=payload,
-                headers={"Authorization": f"Bearer {self._api_key}"},
-                timeout=self._timeout,
-            )
-        except httpx.TimeoutException as e:
-            raise BrightDataTimeoutError from e
-        except httpx.HTTPError as e:
-            raise BrightDataSourceUnavailable from e
+        """
+        Загружает страницу через удалённый браузер Bright Data (Browser API, WebSocket/CDP)
+        и возвращает её HTML.
 
-        if 500 <= resp.status_code < 600:
-            raise BrightDataSourceUnavailable(f"Bright Data 5xx: {resp.status_code}")
-        if resp.status_code >= 400:
-            raise BrightDataInternalError(f"Bright Data 4xx: {resp.text}")
+        Используется и для:
+        - Google SERP (по заранее собранному URL),
+        - fetch-site (главная + внутренние страницы).
+        """
+        ws_endpoint = settings.brightdata_browser_ws_url
+        timeout_ms = settings.brightdata_page_timeout_sec * 1000
 
         try:
-            data = resp.json()
-        except ValueError as e:
-            raise BrightDataInternalError("Invalid JSON from Bright Data") from e
+            async with async_playwright() as p:
+                # подключаемся к удалённому браузеру Bright Data
+                browser = await p.chromium.connect_over_cdp(ws_endpoint)
+                page = await browser.new_page()
 
-        # предполагаем, что вернётся поле "html"
-        html = data.get("html")
-        if not isinstance(html, str):
-            raise BrightDataInternalError("Missing 'html' in Bright Data response")
-        return html
+                try:
+                    await page.goto(
+                        url,
+                        wait_until="domcontentloaded",
+                        timeout=timeout_ms,
+                    )
+                    html = await page.content()
+                    return html
+                finally:
+                    await browser.close()
+
+        except PlaywrightTimeoutError as e:
+            # маппим на error_code="timeout"
+            raise ScraperError(
+                "Bright Data Browser API timeout",
+                ScraperErrorCode.timeout,
+            ) from e
+        except Exception as e:
+            # любая другая ошибка сети / браузера → source_unavailable
+            raise ScraperError(
+                "Bright Data Browser API error",
+                ScraperErrorCode.source_unavailable,
+            ) from e
+

@@ -1,6 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import AnyUrl
-
+from pydantic import Field
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     brightdata_site_endpoint_url: str
     brightdata_timeout_sec: int = 15
     brightdata_max_concurrency: int = 5
+    brightdata_browser_ws_url: str = Field(..., env="BRIGHTDATA_BROWSER_WS_URL")
+    brightdata_page_timeout_sec: int = Field(30, env="BRIGHTDATA_PAGE_TIMEOUT_SEC")
 
     # Yandex / Proxy
     yandex_proxy_host: str
@@ -36,6 +38,9 @@ class Settings(BaseSettings):
     yandex_proxy_password: str
     yandex_request_timeout_sec: int = 15000
     yandex_max_concurrency: int = 3
+
+    class Config:
+        env_file = ".env"
 
 
 settings = Settings()

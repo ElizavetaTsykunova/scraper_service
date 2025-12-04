@@ -1,4 +1,5 @@
 from typing import List
+import urllib.parse
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +32,30 @@ class SerpService:
     async def close(self) -> None:
         await self.http_client.aclose()
 
+    # --------- GOOGLE ---------
+
+    def _build_google_search_url(
+        self,
+        query: str,
+        page: int,
+        locale: str | None,
+        geo: str | None,
+    ) -> str:
+        """
+        Строим URL для выдачи Google.
+
+        page=1 -> start=0
+        page=2 -> start=10
+        ...
+        locale: ru-RU -> hl=ru
+        geo: ru -> gl=ru
+        """
+        start = (page - 1) * 10
+        hl = (locale or "ru-RU").split("-")[0]
+        gl = geo or "ru"
+        q = urllib.parse.quote_plus(query)
+        return f"https://www.google.com/search?q={q}&hl={hl}&gl={gl}&start={start}"
+
     async def fetch_google_serp(self, req: SerpQueryRequest) -> SerpData:
         params = req.dict()
         hash_key = self.cache.serp_request_hash("google", params)
@@ -42,6 +67,7 @@ class SerpService:
         partial = False
 
         max_pages = min(req.max_pages_per_query, settings.max_pages_per_query)
+
         for q in req.queries:
             pages: List[SerpPage] = []
             pages_scanned = 0
@@ -49,16 +75,13 @@ class SerpService:
 
             for page_num in range(1, max_pages + 1):
                 try:
-                    raw = await self.brightdata.fetch_google_serp(
+                    url = self._build_google_search_url(
                         query=q,
                         page=page_num,
-                        locale=req.locale or "ru-RU",
-                        geo=req.geo or "ru",
-                        results_per_page=req.results_per_page,
+                        locale=req.locale,
+                        geo=req.geo,
                     )
-                    html = raw.get("html") or raw.get("content")  # TODO: под реальный формат
-                    if not isinstance(html, str):
-                        raise ScraperError("No HTML in Bright Data response")  # упадет в internal_error
+                    html = await self.brightdata.fetch_page_html(url)
                     serp_page = self.google_parser.parse(html, page_number=page_num)
                     pages.append(serp_page)
                     pages_scanned += 1
@@ -84,8 +107,9 @@ class SerpService:
         )
 
         await self.cache.save_serp("google", hash_key, params, data.dict())
-
         return data
+
+    # --------- YANDEX ---------
 
     async def fetch_yandex_serp(self, req: SerpQueryRequest) -> SerpData:
         params = req.dict()
@@ -138,5 +162,4 @@ class SerpService:
         )
 
         await self.cache.save_serp("yandex", hash_key, params, data.dict())
-
         return data

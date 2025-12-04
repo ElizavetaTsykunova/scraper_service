@@ -10,3 +10,4 @@ lxml
 beautifulsoup4
 playwright
 python-dotenv
+playwright

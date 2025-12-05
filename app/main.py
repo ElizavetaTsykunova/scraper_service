@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Optional
-
+import httpx
 from fastapi import FastAPI, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from app.services.serp_service import SerpService
 from app.services.site_fetch_service import SiteFetchService
 from app.parsing.seo_parser import parse_seo
 from app.parsing.content_parser import parse_content
+from app.clients.brightdata_client import BrightDataClient
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,56 @@ async def on_startup() -> None:
 @app.get("/health", response_model=dict)
 async def health() -> dict:
     return {"status": "ok", "version": settings.scraper_version}
+
+@app.get("/health/brightdata", response_model=BaseResponse)
+async def health_brightdata() -> BaseResponse:
+    """
+    Health-check для BrightData:
+    - делает тестовый запрос на https://www.google.com/
+    - если HTML получен, считаем, что BrightData OK
+    - любые ошибки маппим в status="failed" + error_code
+    """
+    http_client = httpx.AsyncClient()
+    client = BrightDataClient(http_client)
+
+    try:
+        html = await client.fetch_page_html("https://www.google.com/")
+        ok = bool(html and "<html" in html.lower())
+
+        if ok:
+            return BaseResponse(
+                status="success",
+                error_code=None,
+                data={"ok": True},
+            )
+        else:
+            # HTML пустой или странный — технически ответ есть, но считаем, что источник не ок
+            return BaseResponse(
+                status="failed",
+                error_code=ErrorCode.source_unavailable,
+                data={"ok": False, "reason": "empty_or_invalid_html"},
+            )
+
+    except ScraperError as e:
+        # наши типизированные ошибки (timeout, source_unavailable и т.п.)
+        logger.exception("BrightData health ScraperError")
+        code = getattr(e, "error_code", ErrorCode.internal_error)
+        return BaseResponse(
+            status="failed",
+            error_code=code,
+            data={"ok": False},
+        )
+    except Exception:
+        # любые другие неожиданные ошибки
+        logger.exception("Unexpected BrightData health error")
+        return BaseResponse(
+            status="failed",
+            error_code=ErrorCode.internal_error,
+            data={"ok": False},
+        )
+    finally:
+        await http_client.aclose()
+
 
 
 # ------------- SERP: GOOGLE -------------

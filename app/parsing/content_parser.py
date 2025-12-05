@@ -44,7 +44,7 @@ def extract_cta(soup: BeautifulSoup) -> List[Dict]:
     results: List[Dict] = []
 
     for tag in soup.find_all(["a", "button"]):
-        text = _clean_text(tag.get_text())
+        text = _clean_text(tag.get_text(" "))
         if not text:
             continue
 
@@ -72,7 +72,7 @@ def extract_main_sections(soup: BeautifulSoup) -> Dict[str, Optional[str]]:
         el = soup.select_one(selector)
         if not el:
             return None
-        text = _clean_text(el.get_text())
+        text = _clean_text(el.get_text(" "))
         return text or None
 
     sections = {
@@ -95,7 +95,7 @@ def _get_first_heading(el) -> Optional[str]:
         tag_name = f"h{level}"
         h = el.find(tag_name)
         if h:
-            text = _clean_text(h.get_text())
+            text = _clean_text(h.get_text(" "))
             if text:
                 return text
     return None
@@ -148,7 +148,7 @@ def extract_content_blocks(soup: BeautifulSoup) -> List[Dict]:
         if "cookie" in classes_str:
             continue
 
-        text = _clean_text(el.get_text())
+        text = _clean_text(el.get_text(" "))
         if not text:
             # блок без текста (но, возможно, только из картинок) для текстового анализа не интересен
             # логика по чисто графическим блокам (галереи) может быть добавлена в будущем отдельно

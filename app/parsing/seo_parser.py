@@ -12,7 +12,7 @@ from app.parsing.html_cleaner import build_clean_soup
 def _get_text(tag) -> Optional[str]:
     if not tag:
         return None
-    text = tag.get_text(strip=True)
+    text = tag.get_text(" ", strip=True)
     return text or None
 
 

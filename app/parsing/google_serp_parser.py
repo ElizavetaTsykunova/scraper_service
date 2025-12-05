@@ -2,6 +2,7 @@ from typing import List
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
+import logging
 
 from app.config import settings
 from app.models.serp import (
@@ -10,6 +11,7 @@ from app.models.serp import (
     SerpAdResult,
 )
 
+logger = logging.getLogger(__name__)
 
 class GoogleSerpParser:
     """
@@ -53,8 +55,25 @@ class GoogleSerpParser:
         results: List[SerpResultBase] = []
         position = 1
 
-        # Основной паттерн: блоки div.g с вложенным div.yuRUbf > a
-        for block in soup.select("div.g"):
+        # Пробуем несколько вариантов контейнеров
+        blocks_g = soup.select("div.g")
+        blocks_mjj = soup.select("div.MjjYud")  # частый контейнер результата сейчас
+        blocks_njo = soup.select("div.NJo7tc.Z26q7c.uUuwM")  # другой вариант контейнера
+
+        # если классический div.g пустой — используем альтернативы
+        blocks = blocks_g or blocks_mjj or blocks_njo
+
+        logger.info(
+            "google_serp_parser organic blocks",
+            extra={
+                "organic_blocks_g": len(blocks_g),
+                "organic_blocks_MjjYud": len(blocks_mjj),
+                "organic_blocks_NJo7tc": len(blocks_njo),
+            },
+        )
+
+        for block in blocks:
+            # как и было
             link = block.select_one("div.yuRUbf a[href]") or block.select_one("a[href]")
             if not link:
                 continue
@@ -66,11 +85,9 @@ class GoogleSerpParser:
             url = self._normalize_url(url)
             domain = self._extract_domain(url)
 
-            # Заголовок
             title_tag = link.select_one("h3") or block.select_one("h3")
             title = title_tag.get_text(" ", strip=True) if title_tag else url
 
-            # Сниппет: современные Google: .VwiC3b, старые: .aCOpRe
             snippet_tag = block.select_one(".VwiC3b") or block.select_one(".aCOpRe")
             snippet = snippet_tag.get_text(" ", strip=True) if snippet_tag else None
 

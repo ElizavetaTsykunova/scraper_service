@@ -82,6 +82,14 @@ class SerpService:
                         geo=req.geo,
                     )
                     html = await self.brightdata.fetch_page_html(url)
+
+                    # ВРЕМЕННЫЙ DEBUG: сохраняем первую страницу первой выборки
+                    if page_num == 1 and not queries_results:
+                        from pathlib import Path
+                        debug_path = Path("/opt/scraper_service/debug_google_page1.html")
+                        debug_path.write_text(html, encoding="utf-8")
+
+
                     serp_page = self.google_parser.parse(html, page_number=page_num)
                     pages.append(serp_page)
                     pages_scanned += 1

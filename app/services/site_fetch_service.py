@@ -38,7 +38,7 @@ class SiteFetchService:
         Используем Browser / HTTP в зависимости от реализации BrightDataClient.
         """
         try:
-            html = await self.client.fetch_html(url)
+            html = await self.client.fetch_page_html(url)
             return html
         except ScraperError:
             # пробрасываем наверх типизированную ошибку

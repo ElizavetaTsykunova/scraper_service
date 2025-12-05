@@ -1,17 +1,148 @@
-from app.models.serp import SerpPage
+from typing import List
+from urllib.parse import urlparse
+
+from bs4 import BeautifulSoup
+
+from app.config import settings
+from app.models.serp import (
+    SerpPage,
+    SerpResultBase,
+    SerpAdResult,
+)
 
 
 class GoogleSerpParser:
     """
-    Временный безопасный парсер.
-    Просто возвращает пустые результаты, чтобы проверить,
-    что Bright Data и общий пайплайн работают.
+    Парсер HTML выдачи Google в структурированный SerpPage.
+
+    Это "разумный" парсер по основным CSS-классам.
+    Он не претендует на 100% стабильность (Google часто меняет верстку),
+    но покрывает типичные кейсы:
+    - блоки .g с результатами,
+    - заголовки в h3,
+    - сниппеты в .VwiC3b / .aCOpRe,
+    - рекламные блоки по ряду характерных селекторов.
     """
 
+    def __init__(self) -> None:
+        self.max_title = settings.max_title_chars
+        self.max_snippet = settings.max_snippet_chars
+
+    @staticmethod
+    def _normalize_url(raw_url: str) -> str:
+        # Google часто отдаёт /url?q=...&sa=... — можно попытаться декодировать,
+        # но на первых порах отдадим как есть, если это уже нормальный https://...
+        return raw_url
+
+    @staticmethod
+    def _extract_domain(url: str) -> str:
+        parsed = urlparse(url)
+        host = parsed.netloc or ""
+        if host.startswith("www."):
+            host = host[4:]
+        return host
+
+    def _truncate(self, text: str, limit: int) -> tuple[str, bool]:
+        if text is None:
+            return "", False
+        if len(text) <= limit:
+            return text, False
+        return text[:limit], True
+
+    def _parse_organic(self, soup: BeautifulSoup) -> List[SerpResultBase]:
+        results: List[SerpResultBase] = []
+        position = 1
+
+        # Основной паттерн: блоки div.g с вложенным div.yuRUbf > a
+        for block in soup.select("div.g"):
+            link = block.select_one("div.yuRUbf a[href]") or block.select_one("a[href]")
+            if not link:
+                continue
+
+            url = link.get("href", "").strip()
+            if not url:
+                continue
+
+            url = self._normalize_url(url)
+            domain = self._extract_domain(url)
+
+            # Заголовок
+            title_tag = link.select_one("h3") or block.select_one("h3")
+            title = title_tag.get_text(" ", strip=True) if title_tag else url
+
+            # Сниппет: современные Google: .VwiC3b, старые: .aCOpRe
+            snippet_tag = block.select_one(".VwiC3b") or block.select_one(".aCOpRe")
+            snippet = snippet_tag.get_text(" ", strip=True) if snippet_tag else None
+
+            title, title_trunc = self._truncate(title, self.max_title)
+            if snippet is not None:
+                snippet, snippet_trunc = self._truncate(snippet, self.max_snippet)
+            else:
+                snippet_trunc = False
+
+            results.append(
+                SerpResultBase(
+                    position=position,
+                    url=url,
+                    domain=domain,
+                    title=title,
+                    snippet=snippet,
+                    truncated=title_trunc or snippet_trunc,
+                )
+            )
+            position += 1
+
+        return results
+
+    def _parse_ads(self, soup: BeautifulSoup) -> List[SerpAdResult]:
+        ads: List[SerpAdResult] = []
+        position = 1
+
+        # Рекламные блоки Google довольно плавающие,
+        # типичные современные варианты:
+        # - div.uEierd (ад-блок)
+        # - div[data-text-ad]
+        ad_blocks = soup.select("div.uEierd") or soup.select("div[data-text-ad]")
+
+        for block in ad_blocks:
+            link = block.select_one("a[href]")
+            if not link:
+                continue
+
+            url = link.get("href", "").strip()
+            if not url:
+                continue
+
+            url = self._normalize_url(url)
+            domain = self._extract_domain(url)
+
+            title_tag = block.select_one("span[role='heading']") or block.select_one("a h3") or block.select_one("h3")
+            title = title_tag.get_text(" ", strip=True) if title_tag else url
+            title, title_trunc = self._truncate(title, self.max_title)
+
+            # Для MVP не делим рекламу по блокам top/bottom/side — ставим "top"
+            ads.append(
+                SerpAdResult(
+                    position=position,
+                    block="top",
+                    url=url,
+                    domain=domain,
+                    title=title,
+                    truncated=title_trunc,
+                )
+            )
+            position += 1
+
+        return ads
+
     def parse(self, html: str, page_number: int) -> SerpPage:
-        # На будущее сюда добавим реальный разбор HTML выдачи Google.
+        soup = BeautifulSoup(html, "lxml")
+
+        organic = self._parse_organic(soup)
+        ads = self._parse_ads(soup)
+
         return SerpPage(
             page=page_number,
-            organic_results=[],
-            ads=[],
+            organic_results=organic,
+            ads=ads,
         )

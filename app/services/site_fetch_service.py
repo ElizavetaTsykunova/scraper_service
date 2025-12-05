@@ -1,7 +1,7 @@
 # app/services/site_fetch_service.py
 
 from __future__ import annotations
-
+import httpx
 import asyncio
 import logging
 from datetime import datetime, timedelta
@@ -19,19 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 class SiteFetchService:
-    """
-    Логика работ c сайтом:
-    - fetch_site: главная + несколько внутренних страниц (как в ТЗ);
-    - fetch_html_cleaned: только главная страница, очищенный HTML (для HTML-эндпоинта).
-    """
-
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.cache = CacheRepo(db)
-        self.client = BrightDataClient()
+        # свой http-клиент, который передаём в BrightDataClient
+        self.http_client = httpx.AsyncClient()
+        self.client = BrightDataClient(self.http_client)
 
     async def close(self) -> None:
-        await self.client.close()
+        # закрываем httpx-клиент; BrightDataClient отдельного close не требует
+        await self.http_client.aclose()
 
     # ---------- ВНУТРЕННИЙ HELPER ДЛЯ ОДНОЙ СТРАНИЦЫ ----------
 

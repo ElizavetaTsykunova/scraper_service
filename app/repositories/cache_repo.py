@@ -5,7 +5,7 @@ from typing import Any, Optional
 
 from sqlalchemy import Column, BigInteger, String, JSON, DateTime, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-
+from pydantic import BaseModel
 from app.db import Base
 from app.config import settings
 
@@ -43,8 +43,19 @@ class CacheRepo:
 
     @staticmethod
     def _make_hash(payload: Any) -> str:
-        # payload -> стабильная JSON строка -> sha256
-        dumped = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+        """
+        Превращает произвольный payload (в том числе pydantic-модели)
+        в стабильную JSON-строку и считает по ней sha256.
+
+        Важно: pydantic-модели сначала приводим к json-совместимому dict,
+        чтобы HttpUrl, datetime и т.п. стали строками.
+        """
+        # Если прилетела pydantic-модель — приводим к json dict
+        if isinstance(payload, BaseModel):
+            payload = payload.model_dump(mode="json")
+
+        # На всякий случай даём default=str для редких типов
+        dumped = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
         return hashlib.sha256(dumped.encode("utf-8")).hexdigest()
 
     def serp_request_hash(self, engine: str, params: dict) -> str:

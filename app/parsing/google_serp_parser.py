@@ -85,6 +85,9 @@ class GoogleSerpParser:
             url = self._normalize_url(url)
             domain = self._extract_domain(url)
 
+            if not domain:
+                continue
+
             title_tag = link.select_one("h3") or block.select_one("h3")
             title = title_tag.get_text(" ", strip=True) if title_tag else url
 

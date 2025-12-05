@@ -116,13 +116,17 @@ class CacheRepo:
         # 1) Если это pydantic-модель — приводим к json-dict
         if isinstance(request_params, BaseModel):
             request_params = request_params.model_dump(mode="json")
-        # 2) Если это не dict, но что-то сериализуемое — пробуем через json.dumps(..., default=str)
-        elif not isinstance(request_params, dict):
-            try:
-                request_params = json.loads(json.dumps(request_params, default=str))
-            except TypeError:
-                # жёсткий fallback, чтобы точно не упасть
-                request_params = {"value": str(request_params)}
+
+        # 2) На этом этапе request_params может быть:
+        #    - dict с вложенными нестандартными типами (HttpUrl, datetime, и т.п.)
+        #    - чем-то ещё сериализуемым
+        #    Прогоняем через json.dumps(..., default=str) и обратно,
+        #    чтобы гарантированно получить чистый JSON-совместимый dict.
+        try:
+            request_params = json.loads(json.dumps(request_params, default=str))
+        except TypeError:
+            # жёсткий fallback, чтобы точно не упасть
+            request_params = {"value": str(request_params)}
 
         ttl = settings.cache_ttl_sec
         expires_at = _now() + timedelta(seconds=ttl)

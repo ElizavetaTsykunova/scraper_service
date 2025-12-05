@@ -71,7 +71,8 @@ async def google_serp(
 ) -> BaseResponse:
     service = SerpService(db)
     try:
-        data: SerpData = await service.fetch_google(req)
+        # корректное имя метода в SerpService
+        data: SerpData = await service.fetch_google_serp(req)
         return BaseResponse(status="success", error_code=None, data=data.dict())
     except ScraperError as e:
         logger.exception("Google SERP error")

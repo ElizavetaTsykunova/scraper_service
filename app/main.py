@@ -75,7 +75,8 @@ async def google_serp(
         return BaseResponse(status="success", error_code=None, data=data.dict())
     except ScraperError as e:
         logger.exception("Google SERP error")
-        return BaseResponse(status="failed", error_code=e.code, data=None)
+        code = getattr(e, "error_code", ErrorCode.internal_error)
+        return BaseResponse(status="failed", error_code=code, data=None)
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected Google SERP error")
         return BaseResponse(status="failed", error_code=ErrorCode.internal_error, data=None)
@@ -99,7 +100,8 @@ async def yandex_serp(
         return BaseResponse(status="success", error_code=None, data=data.dict())
     except ScraperError as e:
         logger.exception("Yandex SERP error")
-        return BaseResponse(status="failed", error_code=e.code, data=None)
+        code = getattr(e, "error_code", ErrorCode.internal_error)
+        return BaseResponse(status="failed", error_code=code, data=None)
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected Yandex SERP error")
         return BaseResponse(status="failed", error_code=ErrorCode.internal_error, data=None)
@@ -123,7 +125,8 @@ async def fetch_site(
         return BaseResponse(status="success", error_code=None, data=data.dict())
     except ScraperError as e:
         logger.exception("Fetch site error")
-        return BaseResponse(status="failed", error_code=e.code, data=None)
+        code = getattr(e, "error_code", ErrorCode.internal_error)
+        return BaseResponse(status="failed", error_code=code, data=None)
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected fetch site error")
         return BaseResponse(status="failed", error_code=ErrorCode.internal_error, data=None)
@@ -150,7 +153,8 @@ async def fetch_site_html(
         return BaseResponse(status="success", error_code=None, data=data)
     except ScraperError as e:
         logger.exception("Fetch site HTML error")
-        return BaseResponse(status="failed", error_code=e.code, data=None)
+        code = getattr(e, "error_code", ErrorCode.internal_error)
+        return BaseResponse(status="failed", error_code=code, data=None)
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected fetch site HTML error")
         return BaseResponse(status="failed", error_code=ErrorCode.internal_error, data=None)
@@ -175,7 +179,8 @@ async def fetch_site_seo(
         return BaseResponse(status="success", error_code=None, data=data)
     except ScraperError as e:
         logger.exception("SEO parse error")
-        return BaseResponse(status="failed", error_code=e.code, data=None)
+        code = getattr(e, "error_code", ErrorCode.internal_error)
+        return BaseResponse(status="failed", error_code=code, data=None)
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected SEO parse error")
         return BaseResponse(status="failed", error_code=ErrorCode.internal_error, data=None)
@@ -200,7 +205,8 @@ async def fetch_site_content(
         return BaseResponse(status="success", error_code=None, data=data)
     except ScraperError as e:
         logger.exception("Content parse error")
-        return BaseResponse(status="failed", error_code=e.code, data=None)
+        code = getattr(e, "error_code", ErrorCode.internal_error)
+        return BaseResponse(status="failed", error_code=code, data=None)
     except Exception:  # noqa: BLE001
         logger.exception("Unexpected content parse error")
         return BaseResponse(status="failed", error_code=ErrorCode.internal_error, data=None)

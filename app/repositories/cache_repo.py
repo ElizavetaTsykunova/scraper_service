@@ -46,16 +46,17 @@ class CacheRepo:
         """
         Превращает произвольный payload (в том числе pydantic-модели)
         в стабильную JSON-строку и считает по ней sha256.
-
-        Важно: pydantic-модели сначала приводим к json-совместимому dict,
-        чтобы HttpUrl, datetime и т.п. стали строками.
         """
-        # Если прилетела pydantic-модель — приводим к json dict
+        # Если прилетела pydantic-модель — переводим в json-совместимый dict
         if isinstance(payload, BaseModel):
             payload = payload.model_dump(mode="json")
 
-        # На всякий случай даём default=str для редких типов
-        dumped = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+        dumped = json.dumps(
+            payload,
+            sort_keys=True,
+            ensure_ascii=False,
+            default=str,  # на всякий случай: HttpUrl, datetime и т.п. → str
+        )
         return hashlib.sha256(dumped.encode("utf-8")).hexdigest()
 
     def serp_request_hash(self, engine: str, params: dict) -> str:
@@ -105,7 +106,24 @@ class CacheRepo:
         result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def save_site(self, request_hash: str, request_params: dict, response_data: dict) -> None:
+    async def save_site(self, request_hash: str, request_params: Any, response_data: dict) -> None:
+        """
+        Сохраняем кэш выдачи fetch-site.
+
+        request_params может быть dict или pydantic-модель.
+        В БД кладём уже json-совместимый dict (HttpUrl → str и т.п.).
+        """
+        # 1) Если это pydantic-модель — приводим к json-dict
+        if isinstance(request_params, BaseModel):
+            request_params = request_params.model_dump(mode="json")
+        # 2) Если это не dict, но что-то сериализуемое — пробуем через json.dumps(..., default=str)
+        elif not isinstance(request_params, dict):
+            try:
+                request_params = json.loads(json.dumps(request_params, default=str))
+            except TypeError:
+                # жёсткий fallback, чтобы точно не упасть
+                request_params = {"value": str(request_params)}
+
         ttl = settings.cache_ttl_sec
         expires_at = _now() + timedelta(seconds=ttl)
         row = SiteCache(
@@ -117,6 +135,7 @@ class CacheRepo:
         )
         self.db.add(row)
         await self.db.commit()
+
 
     async def cleanup_expired(self) -> None:
         now = _now()
